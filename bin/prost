@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import numpy as np
+import scipy.stats as st
 from pickle import load,loads,dump,dumps
 import click
 import blosc
@@ -35,7 +36,7 @@ def check_seq(seq):
 def createdb(fasta, out):
     '''PROST python package v0.1 createdb command.
 createdb command gets a fasta file and creates a PROST database that can be used as querty or taget database in a search.'''
-    from prost import quantSeq
+    from pyprost import quantSeq
 
     if os.path.exists(prostdir+'/cache.pkl'):
         with open(prostdir+'/cache.pkl','rb') as f:
@@ -93,9 +94,6 @@ createdb command gets a fasta file and creates a PROST database that can be used
             dump(cache,f)
 
 def _search(thr, querydb, targetdb, out):
-    import scipy.stats as st
-    from scipy.stats import median_abs_deviation
-
     with open(querydb,'rb') as f:
         qnames,qdb = loads(blosc.decompress(f.read()))
     with open(targetdb,'rb') as f:
@@ -109,7 +107,7 @@ def _search(thr, querydb, targetdb, out):
         np.absolute(mem,out=mem)
         dbdiff = mem.sum(axis=1)
         m=np.median(dbdiff)
-        s=median_abs_deviation(dbdiff)*1.4826
+        s=st.median_abs_deviation(dbdiff)*1.4826
         zscore = (dbdiff-m)/s
         e = st.norm.cdf(zscore)*ldb
         res = np.where(e < thr)[0]
