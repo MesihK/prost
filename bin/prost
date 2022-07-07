@@ -92,17 +92,7 @@ createdb command gets a fasta file and creates a PROST database that can be used
         with open(prostdir+'/cache.pkl','wb') as f:
             dump(cache,f)
 
-@click.command()
-@click.option('--thr', default=0.05, help='E-value threshold for homolog detection')
-@click.argument('querydb', type=click.Path(exists=True,file_okay=True,dir_okay=False))
-@click.argument('targetdb', type=click.Path(exists=True,file_okay=True,dir_okay=False))
-@click.argument('out', type=click.Path(exists=False,file_okay=True,dir_okay=False))
-def search(thr, querydb, targetdb, out):
-    '''PROST python package v0.1 search command.
-This command searches a query database against a target database.
-Both databases should be created using createdb command. 
-Databases can contain one or more sequences.
-An e-value threshold can be specified with --thr flag. The default e-value threshold is 0.05'''
+def _search(thr, querydb, targetdb, out):
     import scipy.stats as st
     from scipy.stats import median_abs_deviation
 
@@ -136,16 +126,43 @@ An e-value threshold can be specified with --thr flag. The default e-value thres
         for o in output:
             f.write(o+'\n')
 
+@click.command()
+@click.option('--thr', default=0.05, help='E-value threshold for homolog detection')
+@click.argument('querydb', type=click.Path(exists=True,file_okay=True,dir_okay=False))
+@click.argument('targetdb', type=click.Path(exists=True,file_okay=True,dir_okay=False))
+@click.argument('out', type=click.Path(exists=False,file_okay=True,dir_okay=False))
+def search(thr, querydb, targetdb, out):
+    '''PROST python package v0.1 search command.
+This command searches a query database against a target database.
+Both databases should be created using createdb command. 
+Databases can contain one or more sequences.
+An e-value threshold can be specified with --thr flag. The default e-value threshold is 0.05'''
+    _search(thr,querydb,targetdb,out)
+
+@click.command()
+@click.option('--thr', default=0.05, help='E-value threshold for homolog detection')
+@click.argument('querydb', type=click.Path(exists=True,file_okay=True,dir_okay=False))
+@click.argument('out', type=click.Path(exists=False,file_okay=True,dir_okay=False))
+def searchsp(thr, querydb, out):
+    '''PROST python package v0.1 search SwissProt command.
+This command searches a query database against a SwissProt January 2022 database.
+Query database should be created using createdb command. 
+It can contain one or more sequences.
+An e-value threshold can be specified with --thr flag. The default e-value threshold is 0.05'''
+    _search(thr,querydb,prostdir+'/sp.01.22.prdb',out)
+
 @click.group()
 def cli():
     '''PROST python package v0.1.
 Please specify a command.
 createdb: creates a PROST database from given fasta file. The fasta file usually contains more than one entry.
-search: searches a query database agains a target database. Query database can contain one or more sequences embedded using createdb command.'''
+search: searches a query database against a target database. Query database can contain one or more sequences embedded using createdb command.
+searchsp: searches a query database against SwissProt January 2022 database. Query database can contain one or more sequences embedded using createdb command.'''
     pass
 
 cli.add_command(createdb)
 cli.add_command(search)
+cli.add_command(searchsp)
 
 if __name__ == '__main__':
     cli()

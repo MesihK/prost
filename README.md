@@ -14,10 +14,12 @@ Following commands can be used to create databases and perform homology search.
 
 * createdb: creates a PROST database from given fasta file. The fasta file usually contains more than one entry.
 * search: searches a query database agains a target database. Query database can contain one or more sequences embedded using createdb command. `--thr` can be used to specify an e-value threshold. The default threshold is 0.05.
+* searchsp: searches a query database agains a SwissProt January 2022 database. Query database can contain one or more sequences embedded using createdb command. Again `--thr` can be used to specify an e-value threshold. 
 
 ```
 prost createdb db/sp.fa db/sp.prdb
 prost createdb db/covid.fa db/covid.prdb
-prost search --thr 0.05 db/covid.prdb db/sp.prdb
+prost search --thr 0.05 db/covid.prdb db/sp.prdb results.tsv
+prost search --thr 0.05 db/covid.prdb results.tsv
 ```
 
