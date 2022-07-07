@@ -3,13 +3,18 @@ from esm.data import Alphabet
 import numpy as np
 import multiprocessing
 
+import os
+from pathlib import Path
+if 'PROSTDIR' in os.environ: prostdir = os.environ['PROSTDIR']
+else: prostdir = str(Path.home())+'/.config/prost'
+
 torch.set_num_threads(multiprocessing.cpu_count())
 
 #https://github.com/pytorch/pytorch/issues/52286
 torch._C._jit_set_bailout_depth(0)
 torch._C._jit_set_profiling_mode(False)
 
-esm1b = torch.jit.freeze(torch.jit.load('traced_esm1b_25_13.pt').eval())
+esm1b = torch.jit.freeze(torch.jit.load(prostdir+'/traced_esm1b_25_13.pt').eval())
 esm1b = torch.jit.optimize_for_inference(esm1b)
 alphabet = Alphabet.from_architecture("ESM-1b")
 batch_converter = alphabet.get_batch_converter()

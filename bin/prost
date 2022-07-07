@@ -1,7 +1,14 @@
+#!/usr/bin/env python
+
 import numpy as np
 from pickle import load,loads,dump,dumps
 import click
 import blosc
+
+import os
+from pathlib import Path
+if 'PROSTDIR' in os.environ: prostdir = os.environ['PROSTDIR']
+else: prostdir = str(Path.home())+'/.config/prost'
 
 from itertools import groupby
 def fasta_iter(fastafile):
@@ -28,10 +35,13 @@ def check_seq(seq):
 def createdb(fasta, out):
     '''PROST python package v0.1 createdb command.
 createdb command gets a fasta file and creates a PROST database that can be used as querty or taget database in a search.'''
-    from prosttools import quantSeq
+    from prost import quantSeq
 
-    with open('cache.pkl','rb') as f:
-        cache = load(f)
+    if os.path.exists(prostdir+'/cache.pkl'):
+        with open(prostdir+'/cache.pkl','rb') as f:
+            cache = load(f)
+    else:
+        cache = {}
     cacheDirty = False
 
     quant = []
@@ -79,7 +89,7 @@ createdb command gets a fasta file and creates a PROST database that can be used
         f.write(blosc.compress(dumps([np.array(names),np.array(quant)])))
 
     if cacheDirty:
-        with open('cache.pkl','wb') as f:
+        with open(prostdir+'/cache.pkl','wb') as f:
             dump(cache,f)
 
 @click.command()

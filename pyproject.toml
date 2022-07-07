@@ -1,0 +1,12 @@
+[build-system]
+requires = [
+    "setuptools>=42",
+    "wheel",
+    "numpy",
+    "scipy",
+    "click",
+    "blosc",
+    "fair-esm",
+    "torch"
+]
+build-backend = "setuptools.build_meta"

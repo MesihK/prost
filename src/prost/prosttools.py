@@ -1,4 +1,4 @@
-from esmts25_13 import embed
+from .esmts25_13 import embed
 from scipy.fftpack import dct, idct
 import numpy as np
 
