@@ -26,6 +26,8 @@ def check_seq(seq):
 @click.argument('fasta', type=click.Path(exists=True,file_okay=True,dir_okay=False))
 @click.argument('out', type=click.Path(exists=False,file_okay=True,dir_okay=False))
 def createdb(fasta, out):
+    '''PROST python package v0.1 createdb command.
+createdb command gets a fasta file and creates a PROST database that can be used as querty or taget database in a search.'''
     from prosttools import quantSeq
 
     with open('cache.pkl','rb') as f:
@@ -86,6 +88,11 @@ def createdb(fasta, out):
 @click.argument('targetdb', type=click.Path(exists=True,file_okay=True,dir_okay=False))
 @click.argument('out', type=click.Path(exists=False,file_okay=True,dir_okay=False))
 def search(thr, querydb, targetdb, out):
+    '''PROST python package v0.1 search command.
+This command searches a query database against a target database.
+Both databases should be created using createdb command. 
+Databases can contain one or more sequences.
+An e-value threshold can be specified with --thr flag. The default e-value threshold is 0.05'''
     import scipy.stats as st
     from scipy.stats import median_abs_deviation
 
@@ -121,6 +128,10 @@ def search(thr, querydb, targetdb, out):
 
 @click.group()
 def cli():
+    '''PROST python package v0.1.
+Please specify a command.
+createdb: creates a PROST database from given fasta file. The fasta file usually contains more than one entry.
+search: searches a query database agains a target database. Query database can contain one or more sequences embedded using createdb command.'''
     pass
 
 cli.add_command(createdb)
