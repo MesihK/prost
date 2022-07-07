@@ -6,6 +6,7 @@ PROST is fast and accurate compared to traditional tools.
 ### Installation
 
 The package can be installed via `pip install prost`.
+On the initial run, PROST will download required files to `~/.config/prost` or an user defined directory via `PROSTDIR` environment variable.
 
 ### How to use
 
