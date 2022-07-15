@@ -10,23 +10,24 @@ else: prostdir = str(Path.home())+'/.config/prost'
 
 #https://github.com/pytorch/pytorch/issues/52286
 #torch._C._jit_set_bailout_depth(0) # Use _jit_set_fusion_strategy, bailout depth is deprecated.
-torch._C._jit_set_profiling_mode(False)
 
-esm1b = torch.jit.freeze(torch.jit.load(prostdir+'/traced_esm1b_25_13.pt').eval())
-esm1b = torch.jit.optimize_for_inference(esm1b)
+esm1b = torch.jit.load(prostdir+'/traced_esm1b_25_13.pt').eval()
 alphabet = Alphabet.from_architecture("ESM-1b")
 batch_converter = alphabet.get_batch_converter()
 
 #https://stackoverflow.com/a/63616077
 #This prevents memory leak
 for param in esm1b.parameters():
-    pram.grad = None
+    param.grad = None
     param.requires_grad = False
 
 if torch.cuda.is_available():
     esm1b = esm1b.cuda()
 else:
+    torch._C._jit_set_profiling_mode(False)
     torch.set_num_threads(multiprocessing.cpu_count())
+    esm1b = torch.jit.freeze(esm1b)
+    esm1b = torch.jit.optimize_for_inference(esm1b)
 
 def _embed(seq):
     _, _, toks = batch_converter([("prot",seq)])
