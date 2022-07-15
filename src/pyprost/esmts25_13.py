@@ -11,7 +11,7 @@ else: prostdir = str(Path.home())+'/.config/prost'
 torch.set_num_threads(multiprocessing.cpu_count())
 
 #https://github.com/pytorch/pytorch/issues/52286
-torch._C._jit_set_bailout_depth(0)
+#torch._C._jit_set_bailout_depth(0) # Use _jit_set_fusion_strategy, bailout depth is deprecated.
 torch._C._jit_set_profiling_mode(False)
 
 esm1b = torch.jit.freeze(torch.jit.load(prostdir+'/traced_esm1b_25_13.pt').eval())
@@ -25,8 +25,13 @@ for param in esm1b.parameters():
     pram.grad = None
     param.requires_grad = False
 
+if torch.cuda.is_available():
+    esm1b = esm1b.cuda()
+
 def _embed(seq):
     _, _, toks = batch_converter([("prot",seq)])
+    if torch.cuda.is_available():
+        toks = toks.to(device="cuda", non_blocking=True)
     results = esm1b(toks)
     for i in range(len(results)):
         results[i] = results[i].to(device="cpu")[0].detach().numpy()
