@@ -1,4 +1,4 @@
-## PROST python package v0.2.1
+## PROST python package v0.2.2
 
 PRotein Ortholog Search Tool is a new homolog detection tool that utilizes ESM-1b language model and iDCT quantization method.
 PROST is fast and accurate compared to traditional tools. 

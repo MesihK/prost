@@ -151,7 +151,7 @@ An e-value threshold can be specified with --thr flag. The default e-value thres
 
 @click.group()
 def cli():
-    '''PROST python package v0.1.
+    '''PROST python package v0.2.2
 Please specify a command.
 makedb: creates a PROST database from given fasta file. The fasta file usually contains more than one entry.
 search: searches a query database against a target database. Query database can contain one or more sequences embedded using createdb command.
