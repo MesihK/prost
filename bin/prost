@@ -33,9 +33,9 @@ def check_seq(seq):
 @click.command()
 @click.argument('fasta', type=click.Path(exists=True,file_okay=True,dir_okay=False))
 @click.argument('out', type=click.Path(exists=False,file_okay=True,dir_okay=False))
-def createdb(fasta, out):
-    '''PROST python package v0.1 createdb command.
-createdb command gets a fasta file and creates a PROST database that can be used as querty or taget database in a search.'''
+def makedb(fasta, out):
+    '''PROST python package v0.1 makedb command.
+makedb command gets a fasta file and creates a PROST database that can be used as querty or taget database in a search.'''
     from pyprost import quantSeq
 
     if os.path.exists(prostdir+'/cache.pkl'):
@@ -100,7 +100,7 @@ def _search(thr, querydb, targetdb, out):
         tnames,tdb = loads(blosc.decompress(f.read()))
     ldb = len(tdb)
     output = []
-    
+
     mem = np.zeros((ldb,475),dtype='int8')
     for i,q in enumerate(qdb):
         np.subtract(tdb,q,out=mem)
@@ -132,7 +132,7 @@ def _search(thr, querydb, targetdb, out):
 def search(thr, querydb, targetdb, out):
     '''PROST python package v0.1 search command.
 This command searches a query database against a target database.
-Both databases should be created using createdb command. 
+Both databases should be created using makedb command.
 Databases can contain one or more sequences.
 An e-value threshold can be specified with --thr flag. The default e-value threshold is 0.05'''
     _search(thr,querydb,targetdb,out)
@@ -144,7 +144,7 @@ An e-value threshold can be specified with --thr flag. The default e-value thres
 def searchsp(thr, querydb, out):
     '''PROST python package v0.1 search SwissProt command.
 This command searches a query database against a SwissProt January 2022 database.
-Query database should be created using createdb command. 
+Query database should be created using makedb command.
 It can contain one or more sequences.
 An e-value threshold can be specified with --thr flag. The default e-value threshold is 0.05'''
     _search(thr,querydb,prostdir+'/sp.01.22.prdb',out)
@@ -153,7 +153,7 @@ An e-value threshold can be specified with --thr flag. The default e-value thres
 def cli():
     '''PROST python package v0.1.
 Please specify a command.
-createdb: creates a PROST database from given fasta file. The fasta file usually contains more than one entry.
+makedb: creates a PROST database from given fasta file. The fasta file usually contains more than one entry.
 search: searches a query database against a target database. Query database can contain one or more sequences embedded using createdb command.
 searchsp: searches a query database against SwissProt January 2022 database. Query database can contain one or more sequences embedded using createdb command.'''
     pass
