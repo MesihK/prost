@@ -21,7 +21,7 @@ def quant2D(emb,n=5,m=44):
     return (ddct*127).astype('int8')
 
 def quantSeq(seq):
-    e = embed(seq)
+    e = embed(seq.upper())
     q25_544 = quant2D(e[1],5,44)
     q13_385 = quant2D(e[0],3,85)
     return np.concatenate([q25_544,q13_385])

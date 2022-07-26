@@ -57,6 +57,7 @@ makedb command gets a fasta file and creates a PROST database that can be used a
             print(name,'discarded, length:',l)
             continue
 
+        fa[1] = fa[1].upper()
         status,offchar = check_seq(fa[1])
         if status == False:
             print(name,'contains unknown aa',offchar)
@@ -151,7 +152,7 @@ An e-value threshold can be specified with --thr flag. The default e-value thres
 
 @click.group()
 def cli():
-    '''PROST python package v0.2.3
+    '''PROST python package v0.2.4
 Please specify a command.
 makedb: creates a PROST database from given fasta file. The fasta file usually contains more than one entry.
 search: searches a query database against a target database. Query database can contain one or more sequences embedded using createdb command.

@@ -1,11 +1,14 @@
-## PROST python package v0.2.3
+## PROST python package v0.2.4
 
 PRotein Ortholog Search Tool is a new homolog detection tool that utilizes ESM-1b language model and iDCT quantization method.
 PROST is fast and accurate compared to traditional tools. 
 
 ### Installation
 
-The package can be installed via `pip install pyprost`.
+The package can be installed with:
+```
+pip install pyprost
+```
 On the initial run, PROST will download required files to `~/.config/prost` or an user defined directory via `PROSTDIR` environment variable.
 
 ### How to use
