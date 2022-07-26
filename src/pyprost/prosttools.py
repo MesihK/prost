@@ -25,3 +25,6 @@ def quantSeq(seq):
     q25_544 = quant2D(e[1],5,44)
     q13_385 = quant2D(e[0],3,85)
     return np.concatenate([q25_544,q13_385])
+
+def prostDistance(emb1,emb2):
+    return abs(emb1-emb2).sum()/2

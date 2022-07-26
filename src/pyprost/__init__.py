@@ -24,4 +24,4 @@ if not os.path.exists(prostdir+'/sp.01.22.prdb'):
     urllib.request.urlretrieve(link, prostdir+'/sp.01.22.prdb')
     print("Done.")
     
-from .prosttools import quantSeq
+from .prosttools import quantSeq,prostDistance
