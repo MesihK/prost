@@ -8,6 +8,8 @@ from pathlib import Path
 if 'PROSTDIR' in os.environ: prostdir = os.environ['PROSTDIR']
 else: prostdir = str(Path.home())+'/.config/prost'
 
+torch.set_num_threads(int(os.popen('nproc').read().strip()))
+
 #https://github.com/pytorch/pytorch/issues/52286
 #torch._C._jit_set_bailout_depth(0) # Use _jit_set_fusion_strategy, bailout depth is deprecated.
 
