@@ -31,10 +31,10 @@ def check_seq(seq):
     return True,''
 
 @click.command()
-@click.option('-n', '--no-chache')
+@click.option('-n', '--no-cache', is_flag=True, default=False, help='Disable embedding caching')
 @click.argument('fasta', type=click.Path(exists=True,file_okay=True,dir_okay=False))
 @click.argument('out', type=click.Path(exists=False,file_okay=True,dir_okay=False))
-def makedb(no_cache,fasta, out):
+def makedb(no_cache, fasta, out):
     '''PROST python package v0.1 makedb command.
 makedb command gets a fasta file and creates a PROST database that can be used as querty or taget database in a search.'''
     from pyprost import quantSeq
