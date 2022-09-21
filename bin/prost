@@ -31,19 +31,20 @@ def check_seq(seq):
     return True,''
 
 @click.command()
+@click.option('-n', '--no-chache')
 @click.argument('fasta', type=click.Path(exists=True,file_okay=True,dir_okay=False))
 @click.argument('out', type=click.Path(exists=False,file_okay=True,dir_okay=False))
-def makedb(fasta, out):
+def makedb(no_cache,fasta, out):
     '''PROST python package v0.1 makedb command.
 makedb command gets a fasta file and creates a PROST database that can be used as querty or taget database in a search.'''
     from pyprost import quantSeq
 
-    if os.path.exists(prostdir+'/cache.pkl'):
-        with open(prostdir+'/cache.pkl','rb') as f:
-            cache = load(f)
-    else:
-        cache = {}
+    cache = {}
     cacheDirty = False
+    if not no_cache:
+        if os.path.exists(prostdir+'/cache.pkl'):
+            with open(prostdir+'/cache.pkl','rb') as f:
+                cache = load(f)
 
     quant = []
     namesd = {}
@@ -89,9 +90,10 @@ makedb command gets a fasta file and creates a PROST database that can be used a
     with open(out,'wb') as f:
         f.write(blosc.compress(dumps([np.array(names),np.array(quant)])))
 
-    if cacheDirty:
-        with open(prostdir+'/cache.pkl','wb') as f:
-            dump(cache,f)
+    if not no_cache:
+        if cacheDirty:
+            with open(prostdir+'/cache.pkl','wb') as f:
+                dump(cache,f)
 
 def _search(thr, querydb, targetdb, out):
     with open(querydb,'rb') as f:
