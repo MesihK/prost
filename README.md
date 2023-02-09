@@ -51,3 +51,11 @@ print('HPO30-CLC2 prost distance:',dist)
 #Should print: HPO30-CLC2 prost distance: 3479.0
 #Distance smaller than 6875 may indicate homology
 ```
+
+### Resources
+
+* Yeast analysis: https://mesihk.github.io/prostyeast
+* Unannotated Human Proteins Analysis: https://mesihk.github.io/prosthuman
+* Webserver: https://mesihk.github.io/prost 
+* PROST Python package: https://github.com/MesihK/prost
+* PROST Research Data: https://github.com/MesihK/prost-data 
