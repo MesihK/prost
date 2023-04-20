@@ -31,6 +31,175 @@ def check_seq(seq):
     return True,''
 
 @click.command()
+@click.argument('gocsv', type=click.Path(exists=True,file_okay=True,dir_okay=False))
+@click.argument('goobo', type=click.Path(exists=True,file_okay=True,dir_okay=False))
+@click.argument('prdb', type=click.Path(exists=True,file_okay=True,dir_okay=False))
+@click.argument('out', type=click.Path(exists=False,file_okay=True,dir_okay=False))
+def mkgo(gocsv, goobo, prdb, out):
+    '''PROST python package v0.1 mkgo command.
+mkcache command gets go tab file in csv format, GO descriptions in obo format,
+and a PROST database to create a go annotations file.
+
+It will create an output file that contains [go,freq,desc] lists.
+'''
+
+    print("Read the go csv file",gocsv)
+    go = {}
+    with open(gocsv,'r') as f:
+        for line in f:
+            id,golist = line.strip().split(',')
+            go[id] = (list(set(golist.replace(' ','').split(';'))))
+
+    print("Read the PROST database",prdb)
+    with open(prdb,'rb') as f:
+        qnames,qdb = loads(blosc.decompress(f.read()))
+
+    print("Gather GO annotations for proteins in the database")
+    godb = []
+    for name in qnames:
+        id = name.split('|')[1]
+        godb.append(go[id])
+
+
+    print("GO Frequencies: count the occurances of terms")
+    frq = {}
+    totalCnt = 0
+    for l in godb:
+        for term in l:
+            if term in frq: frq[term] += 1
+            else: frq[term] = 1
+            totalCnt += 1
+
+    itm = list(frq.items())
+
+
+    uniqueTermCnt = len(frq)
+    print("Total term count:",totalCnt, "Unique term count:",uniqueTermCnt)
+
+    frq['count'] = totalCnt
+    frq['uniqueTerm'] = uniqueTermCnt
+
+    print("Prepare GO descriptions from",goobo)
+    state = 0
+    id = ''
+    terms = {}
+
+    with open(goobo,'r') as f:
+        for line in f:
+            line = line.strip()
+            if line.startswith('[Term]'):
+                state = 1
+                continue
+            if state == 1:
+                id = line.split(' ')[1]
+                state = 2
+                continue
+            if state == 2:
+                if id not in terms:
+                    terms[id] = line.split(': ')[1]
+                    state = 0
+                else:
+                    print('error',id,line,'exists in the dictionary',terms[id])
+
+
+    item = list(terms.items())
+
+
+    print("Look at swissprot annotations and if they dont have description then add empty one")
+    cnt = 0
+    for g in frq.keys():
+        if g.startswith('GO:'):
+            if g not in terms:
+                cnt +=1
+                terms[g] = ''
+
+    print('Empty description count',cnt)
+
+    print(len(godb),len(qdb),len(qnames),len(frq),len(terms))
+    with open(out,'wb') as f:
+        dump([godb,frq,terms],f)
+
+
+@click.command()
+@click.option('-t', '--test', is_flag=True, default=False, help='Test random 1000 embeddings')
+@click.argument('fasta', type=click.Path(exists=True,file_okay=True,dir_okay=False))
+@click.argument('prdb', type=click.Path(exists=True,file_okay=True,dir_okay=False))
+@click.argument('out', type=click.Path(exists=False,file_okay=True,dir_okay=False))
+def mkcache(test, fasta, prdb, out):
+    '''PROST python package v0.1 mkcache command.
+mkcache command gets a fasta file and a PROST database to create a cache file.
+Cache files are dictionary which consist of amino acid sequence keys and PROST embedding values.
+This command should be run on unparsed PROST databases (no parseUniprotNames)'''
+    from random import sample
+    from pyprost import quantSeq
+    prdbdict = {}
+    with open(prdb,'rb') as f:
+        qnames,qdb = loads(blosc.decompress(f.read()))
+    for i,n in enumerate(qnames):
+        prdbdict[n] = qdb[i]
+
+    cache = {}
+    seq = {}
+    seq2 = []
+    for fa in fasta_iter(fasta):
+        name = fa[0]
+        if name not in prdbdict:
+            print('could not found',name,len(fa[1]))
+            continue
+        #if fa[1] in cache:
+        #    print('already exists',fa[0],fa[1])
+        cache[fa[1]] = prdbdict[name]
+        seq[name] = fa[1]
+        seq2.append(fa[1])
+
+    with open(out,'wb') as f:
+        dump(cache,f)
+
+    print('PROST db size:',len(qdb),'cache size:',len(cache.keys()),'unique seq size',len(set(seq2)))
+    if test:
+        print("Testing random 1000 entries by re quantizing them and checking if the cached version is the same")
+        for i in sample(range(len(qdb)), 1000):
+            name = qnames[i]
+            s = seq[name]
+            quant = qdb[i]
+            q = quantSeq(s)
+            if not np.array_equal(cache[s], quant):
+                print('DB Cache missmatch!',i,name,s)
+            if np.sum(np.abs(cache[s]-q)) > 2:
+                print('Cache Quant missmatch!',i,np.sum(np.abs(cache[s]-q)),name,s)
+
+
+@click.command()
+@click.argument('prdb', type=click.Path(exists=True,file_okay=True,dir_okay=False))
+@click.argument('out', type=click.Path(exists=False,file_okay=True,dir_okay=False))
+def parseUniprotNames(prdb, out):
+    '''PROST python package v0.1 parseUniprotNames command.
+parseUniprotNames commend gets a PROST database file and parses the names by:
+[UniprotID, Name, Type, Organism, OrganismID, Gene]
+and saves upated PROST database to out argument.'''
+    import re
+
+    with open(prdb,'rb') as f:
+        qnames,qdb = loads(blosc.decompress(f.read()))
+    names = np.empty(len(qnames),dtype=object)
+    for i,name in enumerate(qnames):
+        res = re.search("\|([\w]+)\|(\w+_\w+) (.*) OS=(.*) OX=(\d+) GN=(.*) PE=",name)
+        if res is None:
+            res = re.search("\|([\w]+)\|(\w+_\w+) (.*) OS=(.*) OX=(\d+) PE=",name)
+            if res is None:
+                print(name)
+            entry = (res.group(1),res.group(2),res.group(3),res.group(4),res.group(5),'')
+        else:
+            entry = (res.group(1),res.group(2),res.group(3),res.group(4),res.group(5),res.group(6))
+        names[i] = entry
+
+    print(len(names),names[0],names[-1])
+
+    with open(out,'wb') as f:
+        f.write(blosc.compress(dumps([names,qdb])))
+
+
+@click.command()
 @click.option('-n', '--no-cache', is_flag=True, default=False, help='Disable embedding caching')
 @click.argument('fasta', type=click.Path(exists=True,file_okay=True,dir_okay=False))
 @click.argument('out', type=click.Path(exists=False,file_okay=True,dir_okay=False))
@@ -163,6 +332,9 @@ searchsp: searches a query database against SwissProt January 2022 database. Que
 cli.add_command(makedb)
 cli.add_command(search)
 cli.add_command(searchsp)
+cli.add_command(mkgo)
+cli.add_command(mkcache)
+cli.add_command(parseUniprotNames)
 
 if __name__ == '__main__':
     cli()
