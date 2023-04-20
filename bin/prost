@@ -5,6 +5,8 @@ import scipy.stats as st
 from pickle import load,loads,dump,dumps
 import click
 import blosc
+from statsmodels.stats.multitest import multipletests 
+import re
 
 import os
 from pathlib import Path
@@ -29,14 +31,82 @@ def check_seq(seq):
         if a not in aa:
             return False,a
     return True,''
+    
+def parseName(name):
+    if type(name) == tuple: return name
+    res = re.search("\|([\w]+)\|(\w+_\w+) (.*) OS=(.*) OX=(\d+) GN=(.*) PE=",name)
+    if res is None:
+        res = re.search("\|([\w]+)\|(\w+_\w+) (.*) OS=(.*) OX=(\d+) PE=",name)
+        if res is None:
+            return (name,'','','','','')
+        return (res.group(1),res.group(2),res.group(3),res.group(4),res.group(5),'')
+    else:
+        return (res.group(1),res.group(2),res.group(3),res.group(4),res.group(5),res.group(6))
 
+def annotate(ind,evals,go,goFrq,goDesc):
+    spTotalCnt = goFrq['count']
+    gores = go[ind]
+
+    #count go term frequencies in the hits
+    totalCnt = 0
+    goDict = {}
+    for r in gores:
+        for term in r:
+            if term not in goDict: goDict[term] = 1
+            else: goDict[term] += 1
+            totalCnt += 1
+    #dont perform significance test on annotationless proteins, but count them
+    goDict.pop('', None)
+    if len(goDict) < 1: return []
+            
+    #perform significance test
+    plist = []
+    for g,cnt in goDict.items():
+        contTable=[[cnt,goFrq[g]],[totalCnt,spTotalCnt]]
+        _,p,_,_ = st.chi2_contingency(contTable)
+        plist.append([g,p])
+    if len(plist) < 1: return []
+
+    #apply multiple p test correction
+    corrp = list(multipletests([s[1] for s in plist], method="bonferroni")[1])
+
+    #find p<0.001 
+    significant = list()
+    for i,p in enumerate(corrp):
+        if p < 0.001: 
+            #print(plist[i][0],goDesc[plist[i][0]])
+            prot_evals = []
+            prot_inds = []
+            for pind,prot in enumerate(ind):
+                if plist[i][0] in go[prot]:
+                    #print(prot,evals[pind])
+                    prot_evals.append(evals[pind])
+                    prot_inds.append(prot)
+            prot_pvals =  1 - np.exp(-np.array(prot_evals))
+            p2 = st.combine_pvalues(prot_pvals,method='stouffer')[1]
+            #apply multiple correction to new pval. 
+            #Then multiply this with 10 to get 0.05-> 0.5 then substract this from 1 to get 0.5 confidence for 0.05 pval.
+            conf = 1-p2*len(prot_evals)*10
+            #print(len(prot_evals),p,p2,p2*len(prot_evals),conf)
+            
+            #if combined e-values produces p<0.001 then and add the description
+            if p2 < 0.05:
+                significant.append([plist[i][0],goDesc[plist[i][0]],conf,prot_inds[0],prot_evals[0],len(prot_evals)])
+
+    #sort by the list by increasing p value
+    #significant.sort(reverse=False,key=lambda x: x[2])
+    
+    #sort by the list by decreasing confidence
+    significant.sort(reverse=True,key=lambda x: x[2])
+    return significant
+    
 @click.command()
 @click.argument('gocsv', type=click.Path(exists=True,file_okay=True,dir_okay=False))
 @click.argument('goobo', type=click.Path(exists=True,file_okay=True,dir_okay=False))
 @click.argument('prdb', type=click.Path(exists=True,file_okay=True,dir_okay=False))
 @click.argument('out', type=click.Path(exists=False,file_okay=True,dir_okay=False))
 def mkgo(gocsv, goobo, prdb, out):
-    '''PROST python package v0.1 mkgo command.
+    '''mkgo command creates GO databse suitable for PROST.
 mkcache command gets go tab file in csv format, GO descriptions in obo format,
 and a PROST database to create a go annotations file.
 
@@ -55,10 +125,10 @@ It will create an output file that contains [go,freq,desc] lists.
         qnames,qdb = loads(blosc.decompress(f.read()))
 
     print("Gather GO annotations for proteins in the database")
-    godb = []
-    for name in qnames:
+    godb = np.empty(len(qnames),dtype=object)
+    for i,name in enumerate(qnames):
         id = name.split('|')[1]
-        godb.append(go[id])
+        godb[i] = go[id]
 
 
     print("GO Frequencies: count the occurances of terms")
@@ -126,8 +196,7 @@ It will create an output file that contains [go,freq,desc] lists.
 @click.argument('prdb', type=click.Path(exists=True,file_okay=True,dir_okay=False))
 @click.argument('out', type=click.Path(exists=False,file_okay=True,dir_okay=False))
 def mkcache(test, fasta, prdb, out):
-    '''PROST python package v0.1 mkcache command.
-mkcache command gets a fasta file and a PROST database to create a cache file.
+    '''mkcache command gets a fasta file and a PROST database to create a cache file.
 Cache files are dictionary which consist of amino acid sequence keys and PROST embedding values.
 This command should be run on unparsed PROST databases (no parseUniprotNames)'''
     from random import sample
@@ -183,15 +252,7 @@ and saves upated PROST database to out argument.'''
         qnames,qdb = loads(blosc.decompress(f.read()))
     names = np.empty(len(qnames),dtype=object)
     for i,name in enumerate(qnames):
-        res = re.search("\|([\w]+)\|(\w+_\w+) (.*) OS=(.*) OX=(\d+) GN=(.*) PE=",name)
-        if res is None:
-            res = re.search("\|([\w]+)\|(\w+_\w+) (.*) OS=(.*) OX=(\d+) PE=",name)
-            if res is None:
-                print(name)
-            entry = (res.group(1),res.group(2),res.group(3),res.group(4),res.group(5),'')
-        else:
-            entry = (res.group(1),res.group(2),res.group(3),res.group(4),res.group(5),res.group(6))
-        names[i] = entry
+        names[i] = parseName(name)
 
     print(len(names),names[0],names[-1])
 
@@ -204,7 +265,7 @@ and saves upated PROST database to out argument.'''
 @click.argument('fasta', type=click.Path(exists=True,file_okay=True,dir_okay=False))
 @click.argument('out', type=click.Path(exists=False,file_okay=True,dir_okay=False))
 def makedb(no_cache, fasta, out):
-    '''PROST python package v0.1 makedb command.
+    '''makedb command creates PROST databases from FASTA files.
 makedb command gets a fasta file and creates a PROST database that can be used as querty or taget database in a search.'''
     from pyprost import quantSeq
 
@@ -264,7 +325,10 @@ makedb command gets a fasta file and creates a PROST database that can be used a
             with open(prostdir+'/cache.pkl','wb') as f:
                 dump(cache,f)
 
-def _search(thr, querydb, targetdb, out):
+def _search(thr, gothr, querydb, targetdb, godb, out):
+    if godb != None:
+        with open(godb,'rb') as f:
+            go,goFrq,goDesc = load(f)
     with open(querydb,'rb') as f:
         qnames,qdb = loads(blosc.decompress(f.read()))
     with open(targetdb,'rb') as f:
@@ -287,9 +351,19 @@ def _search(thr, querydb, targetdb, out):
         dbdiff = dbdiff[res]/2
         evals = e[res]
         names = tnames[res]
-
+        
+        qname = parseName(qnames[i])[0]
+        
+        if godb != None:
+            res2 = np.where(e < gothr)[0]
+            sort2 = np.argsort(e[res2])
+            res2 = res2[sort2]
+            for a in annotate(res2,e[res2],go,goFrq,goDesc):
+                output.append(f'{qname}\t{a[0]}\t{a[1]}\t{a[2]:.3f}\t{parseName(tnames[a[3]])[0]}\t{a[5]}\t{a[4]:.2e}')
+                
         for n,diff,ev in zip(names,dbdiff,evals):
-            output.append('%s\t%s\t%d\t%.2e'%(qnames[i],n,diff,ev))
+            n = parseName(n)
+            output.append(f'{qname}\t{n[0]}\t{n[1]}\t{n[2]}\t{n[3]}\t{diff}\t{ev:.2e}')
 
     with open(out,'w') as f:
         for o in output:
@@ -301,32 +375,34 @@ def _search(thr, querydb, targetdb, out):
 @click.argument('targetdb', type=click.Path(exists=True,file_okay=True,dir_okay=False))
 @click.argument('out', type=click.Path(exists=False,file_okay=True,dir_okay=False))
 def search(thr, querydb, targetdb, out):
-    '''PROST python package v0.1 search command.
+    '''Search a query database in target database.
 This command searches a query database against a target database.
 Both databases should be created using makedb command.
 Databases can contain one or more sequences.
 An e-value threshold can be specified with --thr flag. The default e-value threshold is 0.05'''
-    _search(thr,querydb,targetdb,out)
+    _search(thr,None,querydb,targetdb,None,out)
 
 @click.command()
 @click.option('--thr', default=0.05, help='E-value threshold for homolog detection')
+@click.option('--gothr', default=0.05, help='E-value threshold for GO annotation')
 @click.argument('querydb', type=click.Path(exists=True,file_okay=True,dir_okay=False))
 @click.argument('out', type=click.Path(exists=False,file_okay=True,dir_okay=False))
-def searchsp(thr, querydb, out):
-    '''PROST python package v0.1 search SwissProt command.
-This command searches a query database against a SwissProt January 2022 database.
+def searchsp(thr,gothr, querydb, out):
+    '''Search query database in SwissProt February 2023 database.
+This command searches a query database against a SwissProt February 2023 database.
 Query database should be created using makedb command.
 It can contain one or more sequences.
-An e-value threshold can be specified with --thr flag. The default e-value threshold is 0.05'''
-    _search(thr,querydb,prostdir+'/sp.01.22.prdb',out)
+An e-value threshold can be specified with --thr flag. The default e-value threshold is 0.05.
+An seperate GO annotation threshold can be specified with --gothr flag. The default is 0.05.'''
+    _search(thr,gothr,querydb,prostdir+'/sp.02.23.parsed.prdb',prostdir+'/sp.02.23.go.pkl',out)
 
 @click.group()
 def cli():
-    '''PROST python package v0.2.6
+    '''PROST python package v0.2.7
 Please specify a command.
 makedb: creates a PROST database from given fasta file. The fasta file usually contains more than one entry.
 search: searches a query database against a target database. Query database can contain one or more sequences embedded using makedb command.
-searchsp: searches a query database against SwissProt January 2022 database. Query database can contain one or more sequences embedded using makedb command.'''
+searchsp: searches a query database against SwissProt February 2023 database. Query database can contain one or more sequences embedded using makedb command.'''
     pass
 
 cli.add_command(makedb)
