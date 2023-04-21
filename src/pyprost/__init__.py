@@ -28,7 +28,7 @@ def _init_prost_files():
             if md5(prostdir+'/'+name) == md5sum:
                 print("Done.")
             else:
-            print("Download error, MD5 missmatch!")
+                print("Download error, MD5 missmatch!")
 
     if not os.path.exists(prostdir+'/traced_esm1b_25_13.pt'):
         download_file('traced_esm1b_25_13.part1','Downloading ESM1b weights part1','c18e325af45d02724400c656a3f0a229')
