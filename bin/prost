@@ -338,6 +338,8 @@ def _search(thr, gothr, querydb, targetdb, godb, out):
 
     mem = np.zeros((ldb,475),dtype='int8')
     for i,q in enumerate(qdb):
+        qname = parseName(qnames[i])[0]
+        print(f'Searching for {qname}')
         np.subtract(tdb,q,out=mem)
         np.absolute(mem,out=mem)
         dbdiff = mem.sum(axis=1)
@@ -352,7 +354,6 @@ def _search(thr, gothr, querydb, targetdb, godb, out):
         evals = e[res]
         names = tnames[res]
         
-        qname = parseName(qnames[i])[0]
         
         if godb != None:
             res2 = np.where(e < gothr)[0]
