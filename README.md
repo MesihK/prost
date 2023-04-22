@@ -18,8 +18,8 @@ Following commands can be used to create databases and perform homology search.
 ```
 prost makedb db/sp.fa db/sp.prdb
 prost makedb db/covid.fa db/covid.prdb
-prost search --thr 0.05 db/covid.prdb db/sp.prdb results.tsv
-prost searchsp --thr 0.05 db/covid.prdb results.tsv
+prost search --thr 0.05 db/covid.prdb db/sp.prdb results
+prost searchsp --thr 0.05 db/covid.prdb results
 ```
 
 * `makedb`: creates a PROST database from given fasta file. The fasta file usually contains more than one entry.
@@ -29,6 +29,8 @@ prost searchsp --thr 0.05 db/covid.prdb results.tsv
 Here is an example result:
 ![jsonwp1](asset/jsonwp1.png)
 ![jsonwp2](asset/jsonwp2.png)
+Sequence alignment done automatically using the [PROTSUB](https://onlinelibrary.wiley.com/doi/full/10.1002/prot.26050) matrix which is better for aligning remote proteins then BLOSUM62 matrix. 
+Protein structures are fetched from the Alphafold 2 database. No alignment produced this time.
 ![jsonwp3](asset/jsonwp3.png)
 
 
