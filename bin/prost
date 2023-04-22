@@ -7,6 +7,8 @@ import click
 import blosc
 from statsmodels.stats.multitest import multipletests 
 import re
+from datetime import datetime
+import json
 
 import os
 from pathlib import Path
@@ -325,7 +327,7 @@ makedb command gets a fasta file and creates a PROST database that can be used a
             with open(prostdir+'/cache.pkl','wb') as f:
                 dump(cache,f)
 
-def _search(thr, gothr, querydb, targetdb, godb, out):
+def _search(thr, gothr, querydb, targetdb, godb):
     if godb != None:
         with open(godb,'rb') as f:
             go,goFrq,goDesc = load(f)
@@ -334,11 +336,13 @@ def _search(thr, gothr, querydb, targetdb, godb, out):
     with open(targetdb,'rb') as f:
         tnames,tdb = loads(blosc.decompress(f.read()))
     ldb = len(tdb)
-    output = []
+    homologList, goList = {},{}
 
     mem = np.zeros((ldb,475),dtype='int8')
     for i,q in enumerate(qdb):
         qname = parseName(qnames[i])[0]
+        goList[qname] = []
+        homologList[qname] = []
         print(f'Searching for {qname}')
         np.subtract(tdb,q,out=mem)
         np.absolute(mem,out=mem)
@@ -354,21 +358,104 @@ def _search(thr, gothr, querydb, targetdb, godb, out):
         evals = e[res]
         names = tnames[res]
         
-        
         if godb != None:
             res2 = np.where(e < gothr)[0]
             sort2 = np.argsort(e[res2])
             res2 = res2[sort2]
             for a in annotate(res2,e[res2],go,goFrq,goDesc):
-                output.append(f'{qname}\t{a[0]}\t{a[1]}\t{a[2]:.3f}\t{parseName(tnames[a[3]])[0]}\t{a[5]}\t{a[4]:.2e}')
+                goList[qname].append([a[0], a[1], f'{a[2]:.3f}', parseName(tnames[a[3]])[0], a[5], f'{a[4]:.2e}'])
                 
         for n,diff,ev in zip(names,dbdiff,evals):
             n = parseName(n)
-            output.append(f'{qname}\t{n[0]}\t{n[1]}\t{n[2]}\t{n[3]}\t{diff}\t{ev:.2e}')
+            homologList[qname].append([n[0], n[1], n[2], n[3], diff, f'{ev:.2e}'])
 
-    with open(out,'w') as f:
-        for o in output:
-            f.write(o+'\n')
+    return goList,homologList
+    
+def toTSV(goList,homologList,out):
+    with open(out+'.tsv','w') as f:
+        for queryP in homologList:
+            for go in goList[queryP]:
+                f.write(f'{queryP}\t'+'\t'.join([str(i) for i in go])+'\n')
+            for hom in homologList[queryP]:
+                f.write(f'{queryP}\t'+'\t'.join([str(i) for i in hom])+'\n')
+
+def createAlignmentPage(p1,p2):
+    return {
+        "h2:caption":f"{p1} & {p2} Alignment",
+        "md:info":f"Alignment of [{p1}](https://www.uniprot.org/uniprotkb/{p1}) and it's homolog [{p2}](https://www.uniprot.org/uniprotkb/{p2}) found by PROST",
+        "alnpdb:test":{
+            "pdb1":f"https://alphafold.ebi.ac.uk/files/AF-{p1}-F1-model_v4.pdb",
+            "pdb2":f"https://alphafold.ebi.ac.uk/files/AF-{p2}-F1-model_v4.pdb",
+            "alnpdb":"",
+            "lineLen":120
+        }
+    }
+
+def toJSONWP(queryDB,targetDB,thr,gothr,goList,homologList,out):
+    # Retrieve user name
+    username = os.getlogin()
+    # Retrieve time of day and date
+    now = datetime.now()
+    time_of_day = now.strftime("%H:%M:%S")  # Format time as hours:minutes:seconds
+    date = now.strftime("%Y-%m-%d")  # Format date as year-month-day
+
+    jsonwp = {
+        'md:caption':'## [PROST](https://www.pnas.org/doi/10.1073/pnas.2211823120) v0.2.9 Search Results',
+        'md:info1':f'The query database is **{queryDB}** and the target database is **{targetDB}**.', 
+        'md:info2':f'This search was conducted by **{username}** at {time_of_day} on {date}.',        
+        'md:info3':f'The e-value threshold for homology detection is **{thr}** and the threshold for GO annotation enrichment is **{gothr}**',
+        'h3:tablecap':'Query Database Proteins',
+        'md:info4':'Please click the link under the "Query Protein" column to access results for each query protein listed',
+        'table:proteinList':{'columns':['l:Query Protein','# Homologs','# GO','Best Homolog','Best H. e-val'],'rows':[]},
+        'navpage:about':{'md:info5':'''### PROST Method
+The Protein Language Search Tool (**PROST**) is a highly accurate and efficient homology search tool designed for remote homology prediction tasks. In comparison to the current state-of-the-art tools, such as CS-BLAST or PHMMER, PROST outperforms them in terms of accuracy and speed. PROST utilizes a protein language model and quantization technique to represent proteins in a numerical format that retains their biophysical, biochemical, and evolutionary information. PROST calculates the distances of all proteins in the database to the user's query protein and performs a statistical test based on the Z-Score of the distance distribution over the entire database. The results are presented with an expected value (e-value) that estimates the likelihood of a match occurring by chance. This value is calculated from the CDF of the z-score and is corrected for multiple testing using the Bonferroni method.
+
+### Automatic GO Enrichment Analysis
+The GO annotation enrichment pipeline in PROST allows for the selection of a different e-value cutoff. This threshold determines the level of significance for the enrichment analysis. To assess the significance of the enriched GO terms, contingency tables are constructed by comparing the frequency of individual GO terms in homologs and the Swissprot database. A term-specific p-value is then calculated by subjecting the contingency table to the Chi-square test. Subsequently, Bonferroni multiple p-test corrections are applied to correct the p-values for each term. Any GO term with a p-value greater than 0.001 is removed from the analysis. The remaining GO terms are evaluated based on their source proteins' e-values, which are combined using Stouffer’s method. The resulting GO terms are subjected to another round of multiple test correction, and the enriched terms are reported..
+
+### Manuscript
+PROST manuscript can be accessed form this [link](https://www.pnas.org/doi/10.1073/pnas.2211823120). Please cite if you used PROST for finding homologs.
+
+### Python Package
+PROST [python package](https://github.com/MesihK/prost) can be used to generate this result webpage with the help of JSONWP visualizer. Please cite both of the work (PROST and JSONWP)
+
+### Citations
+
+``` 
+@article{kilinc2023improved,
+  title={Improved global protein homolog detection with major gains in function identification},
+  author={Kilinc, Mesih and Jia, Kejue and Jernigan, Robert L},
+  journal={Proceedings of the National Academy of Sciences},
+  volume={120},
+  number={9},
+  pages={e2211823120},
+  year={2023},
+  publisher={National Acad Sciences}
+}
+```
+'''},
+        'navpage:disclaimer':{'p:disc':'For documents and software available from this server, we do not warrant or assume any legal liability or responsibility for the accuracy, completeness, or usefulness of any information, product, or process disclosed. We do not endorse or recommend any commercial products, processes, or services. Some pages may provide links to other Internet sites for the convenience of users. We are not responsible for the availability or content of these external sites, nor do we endorse, warrant, or guarantee the products, services, or information described or offered at these other Internet sites. Information that is created by this site is within the public domain. It is not the intention to provide specific medically related advice but rather to provide users with information for better understanding. However, it is requested that in any subsequent use of this work, PROST be given appropriate acknowledgment. We do not collect any personally identifiable information (PII) about visitors to our Web sites.'}
+             }
+    for queryP in homologList:
+        jsonwp[f'page:{queryP}'] = {
+            'h2:caption':f'PROST Results for {queryP}',
+            'h3:goCaption':'GO Annotations',
+            'md:info1':'Link under "GO Term" column directs user to amigo geneontology website for a detailed inspection of the GO term',
+            'table:goList':{'columns':['l:GO Term','Description','Confidence','Source','# Proteins','e-val'],'rows':[]},
+            'h3:homCaption':'Putative Homologs',
+            'md:info2':'Links under "Uniprot" column directs user to Uniprot website for a detailed inspection. Links under "e-value" column opens sequence alignment and protein structure visualization page',
+            'table:homList':{'columns':['l:Uniprot','Name','Type','Organim','Distance','l:e-value'],'rows':[]}
+        }
+        for go in goList[queryP]:
+            jsonwp[f'page:{queryP}']['table:goList']['rows'].append([f'http://amigo.geneontology.org/amigo/term/{go[0]}@{go[0]}']+go[1:])
+        for hom in homologList[queryP]:
+            jsonwp[f'page:{queryP}']['table:homList']['rows'].append([f'https://www.uniprot.org/uniprot/{hom[0]}@{hom[0]}']+hom[1:5]+
+                                                                    [f'{queryP}-{hom[0]}@{hom[5]}'])
+            jsonwp[f'page:{queryP}-{hom[0]}'] = createAlignmentPage(queryP,hom[0])
+        jsonwp['table:proteinList']['rows'].append([f'{queryP}@{queryP}',len(homologList[queryP]),len(goList[queryP]),homologList[queryP][0][0],homologList[queryP][0][5]])
+    # Write the dictionary to a JSON file
+    with open(out+'.json', "w") as f:
+        json.dump(jsonwp, f)
 
 @click.command()
 @click.option('--thr', default=0.05, help='E-value threshold for homolog detection')
@@ -381,13 +468,14 @@ This command searches a query database against a target database.
 Both databases should be created using makedb command.
 Databases can contain one or more sequences.
 An e-value threshold can be specified with --thr flag. The default e-value threshold is 0.05'''
-    _search(thr,None,querydb,targetdb,None,out)
+    goList,homologList = _search(thr,None,querydb,targetdb,None)
+    toTSV(goList,homologList,out)
 
 @click.command()
 @click.option('--thr', default=0.05, help='E-value threshold for homolog detection')
 @click.option('--gothr', default=0.05, help='E-value threshold for GO annotation')
 @click.argument('querydb', type=click.Path(exists=True,file_okay=True,dir_okay=False))
-@click.argument('out', type=click.Path(exists=False,file_okay=True,dir_okay=False))
+@click.argument('out', default='PROST.res', type=click.Path(exists=False,file_okay=True,dir_okay=False))
 def searchsp(thr,gothr, querydb, out):
     '''Search query database in SwissProt February 2023 database.
 This command searches a query database against a SwissProt February 2023 database.
@@ -395,7 +483,9 @@ Query database should be created using makedb command.
 It can contain one or more sequences.
 An e-value threshold can be specified with --thr flag. The default e-value threshold is 0.05.
 An seperate GO annotation threshold can be specified with --gothr flag. The default is 0.05.'''
-    _search(thr,gothr,querydb,prostdir+'/sp.02.23.parsed.prdb',prostdir+'/sp.02.23.go.pkl',out)
+    goList,homologList = _search(thr,gothr,querydb,prostdir+'/sp.02.23.parsed.prdb',prostdir+'/sp.02.23.go.pkl')
+    toTSV(goList,homologList,out)
+    toJSONWP(querydb,"SwissProt February 2023",thr,gothr,goList,homologList,out)
 
 @click.group()
 def cli():

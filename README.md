@@ -15,16 +15,23 @@ On the initial run, PROST will download required files to `~/.config/prost` or a
 
 Following commands can be used to create databases and perform homology search.
 
-* makedb: creates a PROST database from given fasta file. The fasta file usually contains more than one entry.
-* search: searches a query database agains a target database. Query database can contain one or more sequences embedded using makedb command. `--thr` can be used to specify an e-value threshold. The default threshold is 0.05.
-* searchsp: searches a query database agains a SwissProt February 2023 database. Performs GO enrichment analysis on found homologs. Query database can contain one or more sequences embedded using makedb command. Again `--thr` can be used to specify an e-value threshold.  `--gothr` can be used to specifiy different e-value threshold for GO enrichment analysis.
-
 ```
 prost makedb db/sp.fa db/sp.prdb
 prost makedb db/covid.fa db/covid.prdb
 prost search --thr 0.05 db/covid.prdb db/sp.prdb results.tsv
 prost searchsp --thr 0.05 db/covid.prdb results.tsv
 ```
+
+* `makedb`: creates a PROST database from given fasta file. The fasta file usually contains more than one entry.
+* `search`: searches a query database agains a target database. Query database can contain one or more sequences embedded using makedb command. `--thr` can be used to specify an e-value threshold. The default threshold is 0.05.
+* `searchsp`: searches a query database agains a SwissProt February 2023 database. Performs GO enrichment analysis on found homologs. Query database can contain one or more sequences embedded using makedb command. Again `--thr` can be used to specify an e-value threshold.  `--gothr` can be used to specifiy different e-value threshold for GO enrichment analysis. 
+`searchsp` produces a tab seprataed file `.tsv` and a JSON file `.json` that can be used with the tool [JSONWP](https://jsonwp.onrender.com/). 
+Here is an example result:
+![jsonwp1](asset/jsonwp1.png)
+![jsonwp2](asset/jsonwp2.png)
+![jsonwp3](asset/jsonwp3.png)
+
+
 
 ### Scripting
 
@@ -59,3 +66,4 @@ print('HPO30-CLC2 prost distance:',dist)
 * Webserver: https://mesihk.github.io/prost 
 * PROST Python package: https://github.com/MesihK/prost
 * PROST Research Data: https://github.com/MesihK/prost-data 
+* JSONWP: https://jsonwp.onrender.com/
