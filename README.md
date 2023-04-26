@@ -1,4 +1,4 @@
-## PROST python package v0.2.8
+## PROST python package v0.2.10
 
 PRotein Ortholog Search Tool is a new homolog detection tool that utilizes ESM-1b language model and iDCT quantization method.
 PROST is fast and accurate compared to traditional tools. 
@@ -20,12 +20,13 @@ prost makedb db/sp.fa db/sp.prdb
 prost makedb db/covid.fa db/covid.prdb
 prost search --thr 0.05 db/covid.prdb db/sp.prdb results
 prost searchsp --thr 0.05 db/covid.prdb results
+prost tosjonwp -a -i 'info' results.tsv website
 ```
 
 * `makedb`: creates a PROST database from given fasta file. The fasta file usually contains more than one entry.
 * `search`: searches a query database agains a target database. Query database can contain one or more sequences embedded using makedb command. `--thr` can be used to specify an e-value threshold. The default threshold is 0.05.
 * `searchsp`: searches a query database agains a SwissProt February 2023 database. Performs GO enrichment analysis on found homologs. Query database can contain one or more sequences embedded using makedb command. Again `--thr` can be used to specify an e-value threshold.  `--gothr` can be used to specifiy different e-value threshold for GO enrichment analysis. 
-`searchsp` produces a tab seprataed file `.tsv` and a JSON file `.json` that can be used with the tool [JSONWP](https://jsonwp.onrender.com/). 
+`searchsp` produces a tab seprataed file `.tsv` This file can be converted into a `.json` file that can be used with the tool [JSONWP](https://jsonwp.onrender.com/) using the command `prost tojsonwp -i 'Here is an info string to shown on website' results.tsv website`
 Here is an example result:
 ![jsonwp1](asset/jsonwp1.png)
 ![jsonwp2](asset/jsonwp2.png)

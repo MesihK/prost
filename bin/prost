@@ -407,9 +407,7 @@ def createAlignmentPage(p1,p2):
         }
     }
 
-def toJSONWP(queryDB,targetDB,thr,gothr,goList,homologList,prots,out):
-    # Retrieve user name
-    #username = os.getlogin()
+def toJSONWP(queryDB,targetDB,thr,gothr,info,align,goList,homologList,prots,out):
     # Retrieve time of day and date
     now = datetime.now()
     time_of_day = now.strftime("%H:%M:%S")  # Format time as hours:minutes:seconds
@@ -418,13 +416,17 @@ def toJSONWP(queryDB,targetDB,thr,gothr,goList,homologList,prots,out):
 
     jsonwp = {
         'md:caption':'## [PROST](https://www.pnas.org/doi/10.1073/pnas.2211823120) v0.2.9 Search Results',
-        'md:info1':f'The query database is **{queryDB}** and the target database is **{targetDB}**.',
-        'md:info2':f'This search conducted at {time_of_day} on {date}.',
-        'md:info3':f'The e-value threshold for homology detection is **{thr}** and the threshold for GO annotation enrichment is **{gothr}**',
-        'h3:tablecap':'Query Database Proteins',
-        'md:info4':'Please click the link under the "Query Protein" column to access results for each query protein listed',
-        'table:proteinList':{'columns':['l:Query Protein','# Homologs','# GO','Best Homolog','Best H. e-val'],'rows':[]},
-        'navpage:about':{'md:info5':'''### PROST Method
+        'md:info':f'{info}',
+        'md:info2':f'This search was conducted at {time_of_day} on {date}.'
+        }
+    if queryDB is not None and targetDB is not None:
+        jsonwp['md:info1'] = f'The query database is **{queryDB}** and the target database is **{targetDB}**.'
+    if thr is not None and gothr is not None:
+        jsonwp['md:info3'] = f'The e-value threshold for homology detection is **{thr}** and the threshold for GO annotation enrichment is **{gothr}**'
+    jsonwp['h3:tablecap'] = 'Query Database Proteins'
+    jsonwp['md:info4'] = 'Please click the link under the "Query Protein" column to access results for each query protein listed'
+    jsonwp['table:proteinList'] = {'columns':['l:Query Protein','# Homologs','# GO','Best Homolog','Best H. e-val'],'rows':[]}
+    jsonwp['navpage:about'] = {'md:info5':'''### PROST Method
 The Protein Language Search Tool (**PROST**) is a highly accurate and efficient homology search tool designed for remote homology prediction tasks. In comparison to the current state-of-the-art tools, such as CS-BLAST or PHMMER, PROST outperforms them in terms of accuracy and speed. PROST utilizes a protein language model and quantization technique to represent proteins in a numerical format that retains their biophysical, biochemical, and evolutionary information. PROST calculates the distances of all proteins in the database to the user's query protein and performs a statistical test based on the Z-Score of the distance distribution over the entire database. The results are presented with an expected value (e-value) that estimates the likelihood of a match occurring by chance. This value is calculated from the CDF of the z-score and is corrected for multiple testing using the Bonferroni method.
 
 ### Automatic GO Enrichment Analysis
@@ -434,11 +436,11 @@ The GO annotation enrichment pipeline in PROST allows for the selection of a dif
 PROST manuscript can be accessed form this [link](https://www.pnas.org/doi/10.1073/pnas.2211823120). Please cite if you used PROST for finding homologs.
 
 ### Python Package
-PROST [python package](https://github.com/MesihK/prost) can be used to generate this esult webpage with the help of JSONWP visualizer. Please cite both of the work (PROST and JSONWP)
+PROST [python package](https://github.com/MesihK/prost) can be used to generate this result webpage with the help of JSONWP visualizer. Please cite both of the work (PROST and JSONWP)
 
 ### Citations
 
-```
+``` 
 @article{kilinc2023improved,
   title={Improved global protein homolog detection with major gains in function identification},
   author={Kilinc, Mesih and Jia, Kejue and Jernigan, Robert L},
@@ -450,9 +452,10 @@ PROST [python package](https://github.com/MesihK/prost) can be used to generate 
   publisher={National Acad Sciences}
 }
 ```
-'''},
-        'navpage:disclaimer':{'p:disc':'For documents and software available from this server, we do not warrant or assume any legal liability or responsibility for the accuracy, completeness, or usefulness of any information, product, or process disclosed. We do not endorse or recommend any commercial products, processes, or services. Some pages may provide links to other Internet sites for the convenience of users. We are not responsible for the availability or content of these external sites, nor do we endorse, warrant, or guarantee the products, services, or information described or offered at these other Internet sites. Information that is created by this site is within the public domain. It is not the intention to provide specific medically related advice but rather to provide users with information for better understanding. However, it is requested that in any subsequent use of this work, PROST be given appropriate acknowledgment. We do not collect any personally identifiable information (PII) about visitors to our Web sites.'}
-             }
+'''}
+    jsonwp['navpage:disclaimer'] = {
+       'p:disc':'For documents and software available from this server, we do not warrant or assume any legal liability or responsibility for the accuracy, completeness, or usefulness of any information, product, or process disclosed. We do not endorse or recommend any commercial products, processes, or services. Some pages may provide links to other Internet sites for the convenience of users. We are not responsible for the availability or content of these external sites, nor do we endorse, warrant, or guarantee the products, services, or information described or offered at these other Internet sites. Information that is created by this site is within the public domain. It is not the intention to provide specific medically related advice but rather to provide users with information for better understanding. However, it is requested that in any subsequent use of this work, PROST be given appropriate acknowledgment. We do not collect any personally identifiable information (PII) about visitors to our Web sites.'
+   }
     for queryP in prots:
         jsonwp[f'page:{queryP}'] = {
             'h2:caption':f'PROST Results for {queryP}',
@@ -463,21 +466,25 @@ PROST [python package](https://github.com/MesihK/prost) can be used to generate 
             'md:info2':'Links under "Uniprot" column directs user to Uniprot website for a detailed inspection. Links under "e-value" column opens sequence alignment and protein structure visualization page',
             'table:homList':{'columns':['l:Uniprot','Name','Type','Organim','Distance','l:e-value'],'rows':[]}
         }
-        for go in goList[queryP]:
-            jsonwp[f'page:{queryP}']['table:goList']['rows'].append([f'http://amigo.geneontology.org/amigo/term/{go[0]}@{go[0]}']+go[1:])
-        for hom in homologList[queryP]:
-            jsonwp[f'page:{queryP}']['table:homList']['rows'].append([f'https://www.uniprot.org/uniprot/{hom[0]}@{hom[0]}']+hom[1:5]+
-                                                                    [f'{queryP}-{hom[0]}@{hom[5]}'])
-            #jsonwp[f'page:{queryP}-{hom[0]}'] = createAlignmentPage(queryP,hom[0])
+        if queryP in goList:
+            for go in goList[queryP]:
+                jsonwp[f'page:{queryP}']['table:goList']['rows'].append([f'http://amigo.geneontology.org/amigo/term/{go[0]}@{go[0]}']+go[1:])
+        else: goList[queryP] = []
+        if queryP in homologList:
+            for hom in homologList[queryP]:
+                jsonwp[f'page:{queryP}']['table:homList']['rows'].append([f'https://www.uniprot.org/uniprot/{hom[0]}@{hom[0]}']+hom[1:5]+
+                                                                        [f'{queryP}-{hom[0]}@{hom[5]}'])
+                if align: jsonwp[f'page:{queryP}-{hom[0]}'] = createAlignmentPage(queryP,hom[0])
+        else: homologList[queryP] = []
         #print(homologList[queryP][0])
         if len(homologList[queryP]) > 0:
             jsonwp['table:proteinList']['rows'].append([f'{queryP}@{queryP}',len(homologList[queryP]),len(goList[queryP]),homologList[queryP][0][0],homologList[queryP][0][5]])
         else:
             jsonwp['table:proteinList']['rows'].append([f'{queryP}@{queryP}',len(homologList[queryP]),len(goList[queryP]),'',''])
         cnt = cnt + 1
-        if cnt % 10 == 0:
+        if cnt % 20 == 0:
             size = sys.getsizeof(json.dumps(jsonwp))
-            if size >= 34000000:
+            if size >= 33500000:
                 break
     # Write the dictionary to a JSON file
     with open(out+'.json', "w") as f:
@@ -496,7 +503,9 @@ Both databases should be created using makedb command.
 Databases can contain one or more sequences.
 An e-value threshold can be specified with --thr flag. The default e-value threshold is 0.05'''
     goList,homologList = _search(thr,None,querydb,targetdb,None)
+    printf(f'Saving results into {out}.tsv.')
     toTSV(goList,homologList,out)
+    printf(f'You can use `prost tojsonwp` command to convert {out}.tsv results into a webpage!')
 
 @click.command()
 @click.option('--thr', default=0.05, help='E-value threshold for homolog detection')
@@ -512,18 +521,40 @@ It can contain one or more sequences.
 An e-value threshold can be specified with --thr flag. The default e-value threshold is 0.05.
 An seperate GO annotation threshold can be specified with --gothr flag. The default is 0.05.'''
     goList,homologList = _search(thr,gothr,querydb,prostdir+'/sp.02.23.parsed.prdb',prostdir+'/sp.02.23.go.pkl',jobs)
+    printf(f'Saving results into {out}.tsv.')
     toTSV(goList,homologList,out)
+    printf(f'You can use `prost tojsonwp` command to convert {out}.tsv results into a webpage!')
+        
+@click.command()
+@click.argument('tsv', type=click.Path(exists=True,file_okay=True,dir_okay=False))
+@click.option('-a', '--align', is_flag=True, default=False, help='Create alignment pages')
+@click.option('-i', '--info', default="", help='Info to include the webpage')
+@click.argument('out', default='out.json', type=click.Path(exists=False,file_okay=True,dir_okay=False))
+def tojsonwp(tsv, align, info, out):
+    '''Covnert search results into webpage using JSONWP tool'''
+    goList,homologList = {},{}
+    print(f'Read {tsv} file.') 
+    with open(tsv,'r') as f:
+        for line in f:
+            line = line.strip().split('\t')
+            if line[1][0:3] == 'GO:':
+                if line[0] not in goList: goList[line[0]] = []
+                goList[line[0]].append(line[1:])
+            else:
+                if line[0] not in homologList: homologList[line[0]] = []
+                homologList[line[0]].append(line[1:])
     prots = list(homologList.keys())
     lprots = len(prots)
     cur = 0
     i =  0
     while cur < lprots:
-        cur += toJSONWP(querydb,"SwissProt February 2023",thr,gothr,goList,homologList,prots[cur:],out+f'.{i}')
+        print(f'Create {i+1}.th json file.')
+        cur += toJSONWP(None,None,None,None,info,align,goList,homologList,prots[cur:],out+f'.{i}')
         i += 1
-
+    
 @click.group()
 def cli():
-    '''PROST python package v0.2.9
+    '''PROST python package v0.2.10
 Please specify a command.
 makedb: creates a PROST database from given fasta file. The fasta file usually contains more than one entry.
 search: searches a query database against a target database. Query database can contain one or more sequences embedded using makedb command.
@@ -536,6 +567,7 @@ cli.add_command(searchsp)
 cli.add_command(mkgo)
 cli.add_command(mkcache)
 cli.add_command(parseUniprotNames)
+cli.add_command(tojsonwp)
 
 if __name__ == '__main__':
     cli()
