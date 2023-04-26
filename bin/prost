@@ -5,10 +5,12 @@ import scipy.stats as st
 from pickle import load,loads,dump,dumps
 import click
 import blosc
-from statsmodels.stats.multitest import multipletests 
+from statsmodels.stats.multitest import multipletests
 import re
 from datetime import datetime
 import json
+import sys
+from multiprocessing import Pool
 
 import os
 from pathlib import Path
@@ -33,7 +35,7 @@ def check_seq(seq):
         if a not in aa:
             return False,a
     return True,''
-    
+
 def parseName(name):
     if type(name) == tuple: return name
     res = re.search("\|([\w]+)\|(\w+_\w+) (.*) OS=(.*) OX=(\d+) GN=(.*) PE=",name)
@@ -60,7 +62,7 @@ def annotate(ind,evals,go,goFrq,goDesc):
     #dont perform significance test on annotationless proteins, but count them
     goDict.pop('', None)
     if len(goDict) < 1: return []
-            
+
     #perform significance test
     plist = []
     for g,cnt in goDict.items():
@@ -72,10 +74,10 @@ def annotate(ind,evals,go,goFrq,goDesc):
     #apply multiple p test correction
     corrp = list(multipletests([s[1] for s in plist], method="bonferroni")[1])
 
-    #find p<0.001 
+    #find p<0.001
     significant = list()
     for i,p in enumerate(corrp):
-        if p < 0.001: 
+        if p < 0.001:
             #print(plist[i][0],goDesc[plist[i][0]])
             prot_evals = []
             prot_inds = []
@@ -86,22 +88,22 @@ def annotate(ind,evals,go,goFrq,goDesc):
                     prot_inds.append(prot)
             prot_pvals =  1 - np.exp(-np.array(prot_evals))
             p2 = st.combine_pvalues(prot_pvals,method='stouffer')[1]
-            #apply multiple correction to new pval. 
+            #apply multiple correction to new pval.
             #Then multiply this with 10 to get 0.05-> 0.5 then substract this from 1 to get 0.5 confidence for 0.05 pval.
             conf = 1-p2*len(prot_evals)*10
             #print(len(prot_evals),p,p2,p2*len(prot_evals),conf)
-            
+
             #if combined e-values produces p<0.001 then and add the description
             if p2 < 0.05:
                 significant.append([plist[i][0],goDesc[plist[i][0]],conf,prot_inds[0],prot_evals[0],len(prot_evals)])
 
     #sort by the list by increasing p value
     #significant.sort(reverse=False,key=lambda x: x[2])
-    
+
     #sort by the list by decreasing confidence
     significant.sort(reverse=True,key=lambda x: x[2])
     return significant
-    
+
 @click.command()
 @click.argument('gocsv', type=click.Path(exists=True,file_okay=True,dir_okay=False))
 @click.argument('goobo', type=click.Path(exists=True,file_okay=True,dir_okay=False))
@@ -327,23 +329,19 @@ makedb command gets a fasta file and creates a PROST database that can be used a
             with open(prostdir+'/cache.pkl','wb') as f:
                 dump(cache,f)
 
-def _search(thr, gothr, querydb, targetdb, godb):
-    if godb != None:
-        with open(godb,'rb') as f:
-            go,goFrq,goDesc = load(f)
-    with open(querydb,'rb') as f:
-        qnames,qdb = loads(blosc.decompress(f.read()))
-    with open(targetdb,'rb') as f:
-        tnames,tdb = loads(blosc.decompress(f.read()))
+def _search_worker(thr, gothr, qnames,qdb,tnames,tdb, go,goFrq,goDesc, mem, taskInd, n):
+    lqdb = len(qdb)
     ldb = len(tdb)
+    start = int(lqdb/n*taskInd)
+    stop = int(lqdb/n*(taskInd+1))
+    if stop > lqdb: stop = lqdb
+    print(taskInd,n,start,stop)
     homologList, goList = {},{}
-
-    mem = np.zeros((ldb,475),dtype='int8')
-    for i,q in enumerate(qdb):
-        qname = parseName(qnames[i])[0]
+    for i,q in enumerate(qdb[start:stop]):
+        qname = parseName(qnames[i+start])[0]
         goList[qname] = []
         homologList[qname] = []
-        print(f'Searching for {qname}')
+        print(f'[{taskInd:02d}] Searching for {qname}')
         np.subtract(tdb,q,out=mem)
         np.absolute(mem,out=mem)
         dbdiff = mem.sum(axis=1)
@@ -357,20 +355,38 @@ def _search(thr, gothr, querydb, targetdb, godb):
         dbdiff = dbdiff[res]/2
         evals = e[res]
         names = tnames[res]
-        
-        if godb != None:
+
+        if go is not None:
             res2 = np.where(e < gothr)[0]
             sort2 = np.argsort(e[res2])
             res2 = res2[sort2]
             for a in annotate(res2,e[res2],go,goFrq,goDesc):
                 goList[qname].append([a[0], a[1], f'{a[2]:.3f}', parseName(tnames[a[3]])[0], a[5], f'{a[4]:.2e}'])
-                
+
         for n,diff,ev in zip(names,dbdiff,evals):
             n = parseName(n)
             homologList[qname].append([n[0], n[1], n[2], n[3], diff, f'{ev:.2e}'])
-
     return goList,homologList
-    
+def _search(thr, gothr, querydb, targetdb, godb,n):
+    if godb != None:
+        with open(godb,'rb') as f:
+            go,goFrq,goDesc = load(f)
+    with open(querydb,'rb') as f:
+        qnames,qdb = loads(blosc.decompress(f.read()))
+    with open(targetdb,'rb') as f:
+        tnames,tdb = loads(blosc.decompress(f.read()))
+    ldb = len(tdb)
+    homologList, goList = {},{}
+
+    mem = np.zeros((n,ldb,475),dtype='int8')
+    with Pool(n) as pool:
+        if godb != None: items = [(thr, gothr, qnames,qdb,tnames,tdb, go,goFrq,goDesc, mem[i], i, n) for i in range(n)]
+        else: items = [(thr, gothr, qnames,qdb,tnames,tdb, None,None,None, mem[i], i, n) for i in range(n)]
+        for result in pool.starmap(_search_worker, items):
+            homologList.update(result[1])
+            goList.update(result[0])
+    return goList,homologList
+
 def toTSV(goList,homologList,out):
     with open(out+'.tsv','w') as f:
         for queryP in homologList:
@@ -391,18 +407,19 @@ def createAlignmentPage(p1,p2):
         }
     }
 
-def toJSONWP(queryDB,targetDB,thr,gothr,goList,homologList,out):
+def toJSONWP(queryDB,targetDB,thr,gothr,goList,homologList,prots,out):
     # Retrieve user name
-    username = os.getlogin()
+    #username = os.getlogin()
     # Retrieve time of day and date
     now = datetime.now()
     time_of_day = now.strftime("%H:%M:%S")  # Format time as hours:minutes:seconds
     date = now.strftime("%Y-%m-%d")  # Format date as year-month-day
+    cnt = 0
 
     jsonwp = {
         'md:caption':'## [PROST](https://www.pnas.org/doi/10.1073/pnas.2211823120) v0.2.9 Search Results',
-        'md:info1':f'The query database is **{queryDB}** and the target database is **{targetDB}**.', 
-        'md:info2':f'This search was conducted by **{username}** at {time_of_day} on {date}.',        
+        'md:info1':f'The query database is **{queryDB}** and the target database is **{targetDB}**.',
+        'md:info2':f'This search conducted at {time_of_day} on {date}.',
         'md:info3':f'The e-value threshold for homology detection is **{thr}** and the threshold for GO annotation enrichment is **{gothr}**',
         'h3:tablecap':'Query Database Proteins',
         'md:info4':'Please click the link under the "Query Protein" column to access results for each query protein listed',
@@ -417,11 +434,11 @@ The GO annotation enrichment pipeline in PROST allows for the selection of a dif
 PROST manuscript can be accessed form this [link](https://www.pnas.org/doi/10.1073/pnas.2211823120). Please cite if you used PROST for finding homologs.
 
 ### Python Package
-PROST [python package](https://github.com/MesihK/prost) can be used to generate this result webpage with the help of JSONWP visualizer. Please cite both of the work (PROST and JSONWP)
+PROST [python package](https://github.com/MesihK/prost) can be used to generate this esult webpage with the help of JSONWP visualizer. Please cite both of the work (PROST and JSONWP)
 
 ### Citations
 
-``` 
+```
 @article{kilinc2023improved,
   title={Improved global protein homolog detection with major gains in function identification},
   author={Kilinc, Mesih and Jia, Kejue and Jernigan, Robert L},
@@ -436,7 +453,7 @@ PROST [python package](https://github.com/MesihK/prost) can be used to generate 
 '''},
         'navpage:disclaimer':{'p:disc':'For documents and software available from this server, we do not warrant or assume any legal liability or responsibility for the accuracy, completeness, or usefulness of any information, product, or process disclosed. We do not endorse or recommend any commercial products, processes, or services. Some pages may provide links to other Internet sites for the convenience of users. We are not responsible for the availability or content of these external sites, nor do we endorse, warrant, or guarantee the products, services, or information described or offered at these other Internet sites. Information that is created by this site is within the public domain. It is not the intention to provide specific medically related advice but rather to provide users with information for better understanding. However, it is requested that in any subsequent use of this work, PROST be given appropriate acknowledgment. We do not collect any personally identifiable information (PII) about visitors to our Web sites.'}
              }
-    for queryP in homologList:
+    for queryP in prots:
         jsonwp[f'page:{queryP}'] = {
             'h2:caption':f'PROST Results for {queryP}',
             'h3:goCaption':'GO Annotations',
@@ -451,11 +468,21 @@ PROST [python package](https://github.com/MesihK/prost) can be used to generate 
         for hom in homologList[queryP]:
             jsonwp[f'page:{queryP}']['table:homList']['rows'].append([f'https://www.uniprot.org/uniprot/{hom[0]}@{hom[0]}']+hom[1:5]+
                                                                     [f'{queryP}-{hom[0]}@{hom[5]}'])
-            jsonwp[f'page:{queryP}-{hom[0]}'] = createAlignmentPage(queryP,hom[0])
-        jsonwp['table:proteinList']['rows'].append([f'{queryP}@{queryP}',len(homologList[queryP]),len(goList[queryP]),homologList[queryP][0][0],homologList[queryP][0][5]])
+            #jsonwp[f'page:{queryP}-{hom[0]}'] = createAlignmentPage(queryP,hom[0])
+        #print(homologList[queryP][0])
+        if len(homologList[queryP]) > 0:
+            jsonwp['table:proteinList']['rows'].append([f'{queryP}@{queryP}',len(homologList[queryP]),len(goList[queryP]),homologList[queryP][0][0],homologList[queryP][0][5]])
+        else:
+            jsonwp['table:proteinList']['rows'].append([f'{queryP}@{queryP}',len(homologList[queryP]),len(goList[queryP]),'',''])
+        cnt = cnt + 1
+        if cnt % 10 == 0:
+            size = sys.getsizeof(json.dumps(jsonwp))
+            if size >= 34000000:
+                break
     # Write the dictionary to a JSON file
     with open(out+'.json', "w") as f:
         json.dump(jsonwp, f)
+    return cnt
 
 @click.command()
 @click.option('--thr', default=0.05, help='E-value threshold for homolog detection')
@@ -474,18 +501,25 @@ An e-value threshold can be specified with --thr flag. The default e-value thres
 @click.command()
 @click.option('--thr', default=0.05, help='E-value threshold for homolog detection')
 @click.option('--gothr', default=0.05, help='E-value threshold for GO annotation')
+@click.option('-n', '--jobs', default=1, help='Number of jobs to run in parallel')
 @click.argument('querydb', type=click.Path(exists=True,file_okay=True,dir_okay=False))
 @click.argument('out', default='PROST.res', type=click.Path(exists=False,file_okay=True,dir_okay=False))
-def searchsp(thr,gothr, querydb, out):
+def searchsp(thr,gothr,jobs, querydb, out):
     '''Search query database in SwissProt February 2023 database.
 This command searches a query database against a SwissProt February 2023 database.
 Query database should be created using makedb command.
 It can contain one or more sequences.
 An e-value threshold can be specified with --thr flag. The default e-value threshold is 0.05.
 An seperate GO annotation threshold can be specified with --gothr flag. The default is 0.05.'''
-    goList,homologList = _search(thr,gothr,querydb,prostdir+'/sp.02.23.parsed.prdb',prostdir+'/sp.02.23.go.pkl')
+    goList,homologList = _search(thr,gothr,querydb,prostdir+'/sp.02.23.parsed.prdb',prostdir+'/sp.02.23.go.pkl',jobs)
     toTSV(goList,homologList,out)
-    toJSONWP(querydb,"SwissProt February 2023",thr,gothr,goList,homologList,out)
+    prots = list(homologList.keys())
+    lprots = len(prots)
+    cur = 0
+    i =  0
+    while cur < lprots:
+        cur += toJSONWP(querydb,"SwissProt February 2023",thr,gothr,goList,homologList,prots[cur:],out+f'.{i}')
+        i += 1
 
 @click.group()
 def cli():
@@ -505,3 +539,4 @@ cli.add_command(parseUniprotNames)
 
 if __name__ == '__main__':
     cli()
+
