@@ -493,16 +493,17 @@ PROST [python package](https://github.com/MesihK/prost) can be used to generate 
 
 @click.command()
 @click.option('--thr', default=0.05, help='E-value threshold for homolog detection')
+@click.option('-n', '--jobs', default=1, help='Number of jobs to run in parallel')
 @click.argument('querydb', type=click.Path(exists=True,file_okay=True,dir_okay=False))
 @click.argument('targetdb', type=click.Path(exists=True,file_okay=True,dir_okay=False))
 @click.argument('out', type=click.Path(exists=False,file_okay=True,dir_okay=False))
-def search(thr, querydb, targetdb, out):
+def search(thr, jobs, querydb, targetdb, out):
     '''Search a query database in target database.
 This command searches a query database against a target database.
 Both databases should be created using makedb command.
 Databases can contain one or more sequences.
 An e-value threshold can be specified with --thr flag. The default e-value threshold is 0.05'''
-    goList,homologList = _search(thr,None,querydb,targetdb,None)
+    goList,homologList = _search(thr,None,querydb,targetdb,None,jobs)
     print(f'Saving results into {out}.tsv.')
     toTSV(goList,homologList,out)
     print(f'You can use `prost tojsonwp` command to convert {out}.tsv results into a webpage!')
