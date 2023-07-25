@@ -415,7 +415,7 @@ def toJSONWP(queryDB,targetDB,thr,gothr,info,align,goList,homologList,prots,out)
     cnt = 0
 
     jsonwp = {
-        'md:caption':'## [PROST](https://www.pnas.org/doi/10.1073/pnas.2211823120) v0.2.9 Search Results',
+        'md:caption':'## [PROST](https://www.pnas.org/doi/10.1073/pnas.2211823120) v0.2.14 Search Results',
         'md:info':f'{info}',
         'md:info2':f'This search was conducted at {time_of_day} on {date}.'
         }
@@ -555,7 +555,7 @@ def tojsonwp(tsv, align, info, out):
     
 @click.group()
 def cli():
-    '''PROST python package v0.2.10
+    '''PROST python package v0.2.14
 Please specify a command.
 makedb: creates a PROST database from given fasta file. The fasta file usually contains more than one entry.
 search: searches a query database against a target database. Query database can contain one or more sequences embedded using makedb command.
