@@ -329,6 +329,38 @@ makedb command gets a fasta file and creates a PROST database that can be used a
             with open(prostdir+'/cache.pkl','wb') as f:
                 dump(cache,f)
 
+@click.command()
+@click.argument('input_files', nargs=-1, type=click.Path(exists=True))
+@click.argument('output_file', type=click.Path(exists=False))
+def mergedbs(input_files, output_file):
+    """Merges multiple PROST databases into one.
+
+    Args:
+        input_files: List of input PROST databases
+        output_file: Path to write combined database
+    """
+    all_names = []
+    all_quant = []
+
+    for file in input_files:
+        try:
+            with open(file, 'rb') as f:
+                names, db = loads(blosc.decompress(f.read()))
+                all_names.extend(names)
+                all_quant.extend(db)
+                print(f"Processing {file}, number of entries: {len(db)}")
+        except Exception as e:
+            print(f"Error processing {file}: {str(e)}", err=True)
+            continue
+
+    try:
+        with open(output_file, 'wb') as f:
+            combined = blosc.compress(dumps([np.array(all_names), np.array(all_quant)]))
+            f.write(combined)
+        print(f"Successfully combined {len(input_files)} files into {output_file} with {len(all_quant)} entries.")
+    except Exception as e:
+        print(f"Error writing output file: {str(e)}", err=True)
+
 def _search_worker(thr, gothr, qnames,qdb,tnames,tdb, go,goFrq,goDesc, mem, taskInd, n):
     lqdb = len(qdb)
     ldb = len(tdb)
@@ -563,6 +595,7 @@ searchsp: searches a query database against SwissProt February 2023 database. Qu
     pass
 
 cli.add_command(makedb)
+cli.add_command(mergedbs)
 cli.add_command(search)
 cli.add_command(searchsp)
 cli.add_command(mkgo)
