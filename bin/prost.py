@@ -38,9 +38,9 @@ def check_seq(seq):
 
 def parseName(name):
     if type(name) == tuple: return name
-    res = re.search("\|([\w]+)\|(\w+_\w+) (.*) OS=(.*) OX=(\d+) GN=(.*) PE=",name)
+    res = re.search(r"\|([\w]+)\|(\w+_\w+) (.*) OS=(.*) OX=(\d+) GN=(.*) PE=",name)
     if res is None:
-        res = re.search("\|([\w]+)\|(\w+_\w+) (.*) OS=(.*) OX=(\d+) PE=",name)
+        res = re.search(r"\|([\w]+)\|(\w+_\w+) (.*) OS=(.*) OX=(\d+) PE=",name)
         if res is None:
             return (name,'','','','','')
         return (res.group(1),res.group(2),res.group(3),res.group(4),res.group(5),'')
