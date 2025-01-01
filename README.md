@@ -1,4 +1,4 @@
-## PROST python package v0.2.15
+## PROST python package v0.2.16
 
 PRotein Ortholog Search Tool is a new homolog detection tool that utilizes ESM-1b language model and iDCT quantization method.
 PROST is fast and accurate compared to traditional tools. 
@@ -23,7 +23,7 @@ prost.py searchsp --thr 0.05 --jobs 8 db/covid.prdb results
 prost.py tosjonwp -a -i 'info' results.tsv website
 ```
 
-* `makedb`: creates a PROST database from given fasta file. The fasta file usually contains more than one entry.
+* `makedb`: creates a PROST database from given fasta file. The fasta file usually contains more than one entry. If you are processing large number of proteins use splitting option to save the quantizations into smaller databases (`--split 1000`). Later this chunks can be merged to a one database with `mergedbs` command (`pyprost.py mergedbs input* out.prdb`).
 * `search`: searches a query database agains a target database. Query database can contain one or more sequences embedded using makedb command. `--thr` can be used to specify an e-value threshold. The default threshold is 0.05. You can paralelize the search by using `--jobs` option.
 * `searchsp`: searches a query database agains a SwissProt February 2023 database. Performs GO enrichment analysis on found homologs. Query database can contain one or more sequences embedded using makedb command. Again `--thr` can be used to specify an e-value threshold.  `--gothr` can be used to specifiy different e-value threshold for GO enrichment analysis. 
 `searchsp` produces a tab seprataed file `.tsv` This file can be converted into a `.json` file that can be used with the tool [JSONWP](https://jsonwp.onrender.com/) using the command `prost.py tojsonwp -i 'Here is an info string to shown on website' results.tsv website`
