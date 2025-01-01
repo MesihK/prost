@@ -262,19 +262,20 @@ and saves upated PROST database to out argument.'''
 
     with open(out,'wb') as f:
         f.write(blosc.compress(dumps([names,qdb])))
-
-
 @click.command()
 @click.option('-n', '--no-cache', is_flag=True, default=False, help='Disable embedding caching')
+@click.option('-s', '--split', default=0, type=int, help='Split output into files of specified size (0 for no split)')
 @click.argument('fasta', type=click.Path(exists=True,file_okay=True,dir_okay=False))
 @click.argument('out', type=click.Path(exists=False,file_okay=True,dir_okay=False))
-def makedb(no_cache, fasta, out):
+def makedb(no_cache, split, fasta, out):
     '''makedb command creates PROST databases from FASTA files.
-makedb command gets a fasta file and creates a PROST database that can be used as querty or taget database in a search.'''
+makedb command gets a fasta file and creates a PROST database that can be used as query or target database in a search.'''
     from pyprost import quantSeq
 
     cache = {}
     cacheDirty = False
+    file_ind = 0
+
     if not no_cache:
         if os.path.exists(prostdir+'/cache.pkl'):
             with open(prostdir+'/cache.pkl','rb') as f:
@@ -316,18 +317,25 @@ makedb command gets a fasta file and creates a PROST database that can be used a
 
         assert np.shape(quant[-1])[0] == 475
 
-    names = list(namesd.keys())
+        if split > 0 and len(quant) >= split:
+            split_names = list(namesd.keys())[-split:]
+            split_quant = quant[-split:]
+            split_filename = f"{os.path.splitext(out)[0]}_{file_ind}.prdb"
+            with open(split_filename, 'wb') as f:
+                f.write(blosc.compress(dumps([np.array(split_names), np.array(split_quant)])))
+            print(f'Written split file: {split_filename} with {len(split_names)} entries')
+            quant = quant[:-split]
+            file_ind += 1
 
-    assert len(names) == np.shape(quant)[0]
-    print('Total number of sequences embedded in the db:',len(names))
+    if len(quant) > 0:
+        final_filename = f"{os.path.splitext(out)[0]}_{file_ind}.prdb" if split > 0 else out
+        with open(final_filename, 'wb') as f:
+            f.write(blosc.compress(dumps([np.array(list(namesd.keys())[-len(quant):]), np.array(quant)])))
+        print(f'Written {"final " if split > 0 else ""}file: {final_filename} with {len(quant)} entries')
 
-    with open(out,'wb') as f:
-        f.write(blosc.compress(dumps([np.array(names),np.array(quant)])))
-
-    if not no_cache:
-        if cacheDirty:
-            with open(prostdir+'/cache.pkl','wb') as f:
-                dump(cache,f)
+    if not no_cache and cacheDirty:
+        with open(prostdir+'/cache.pkl','wb') as f:
+            dump(cache,f)
 
 @click.command()
 @click.argument('input_files', nargs=-1, type=click.Path(exists=True))
